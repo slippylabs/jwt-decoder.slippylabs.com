@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWT Decoder // jwt-decoder.slippylabs.com</title>
+<meta name="description" content="Decode and inspect JSON Web Tokens, with human-readable claims and local HS256/384/512 signature verification. Nothing is uploaded.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2234%22%20r%3D%2222%22%20fill%3D%22%231c8a52%22%20stroke%3D%22%2339ff8f%22%20stroke-width%3D%222%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2216%22%20r%3D%228%22%20fill%3D%22%231c8a52%22%20stroke%3D%22%2339ff8f%22%20stroke-width%3D%222%22%2F%3E%3Ccircle%20cx%3D%2244%22%20cy%3D%2216%22%20r%3D%228%22%20fill%3D%22%231c8a52%22%20stroke%3D%22%2339ff8f%22%20stroke-width%3D%222%22%2F%3E%3C%2Fsvg%3E">
+<meta name="theme-color" content="#050b10">
+<link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+
+<div class="starfield"></div>
+<div class="scanlines"></div>
+
+<main class="page-wrap">
+  <div class="hud-panel wide">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div class="callsign-row">
+      <div class="toad-avatar-wrap">
+        <svg class="toad-avatar" width="46" height="46" viewBox="0 0 64 64">
+          <circle cx="32" cy="34" r="22" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="20" cy="16" r="8" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="44" cy="16" r="8" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="20" cy="16" r="3.5" fill="#050b10"/>
+          <circle cx="44" cy="16" r="3.5" fill="#050b10"/>
+          <ellipse cx="24" cy="32" rx="4.5" ry="5.5" fill="#050b10"/>
+          <ellipse cx="40" cy="32" rx="4.5" ry="5.5" fill="#050b10"/>
+          <circle cx="24" cy="30" r="1.4" fill="#39ff8f"/>
+          <circle cx="40" cy="30" r="1.4" fill="#39ff8f"/>
+          <path d="M22 42 Q32 48 42 42" stroke="#050b10" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="lock-reticle"></div>
+      </div>
+      <span class="callsign">Workshop Division // Tool</span>
+      <div class="nav-links">
+        <a href="https://projects.slippylabs.com/" class="logout-link">&larr; Archive</a>
+      </div>
+    </div>
+
+    <h1>JWT DECODER</h1>
+    <p class="subtitle">Paste a JSON Web Token to decode its header and payload, read the registered claims in plain language, and optionally verify an HMAC signature. Everything runs locally.</p>
+
+    <div class="tool-field-row">
+      <label class="tool-field-label" for="jwt-input">Token</label>
+      <textarea class="tool-textarea" id="jwt-input" spellcheck="false" autocomplete="off" style="min-height:120px" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.signature"></textarea>
+    </div>
+
+    <div class="tool-controls">
+      <button class="tool-btn ghost" id="sample-btn">Load Sample</button>
+      <button class="tool-btn ghost" id="clear-btn">Clear</button>
+    </div>
+
+    <p class="tool-output error-text hidden" id="parse-error"></p>
+
+    <div id="result-panel" class="hidden">
+      <div class="stat-grid">
+        <div class="stat-tile"><span class="stat-value" id="stat-alg">&mdash;</span><span class="stat-label">Algorithm</span></div>
+        <div class="stat-tile"><span class="stat-value" id="stat-typ">&mdash;</span><span class="stat-label">Type</span></div>
+        <div class="stat-tile"><span class="stat-value" id="stat-status">&mdash;</span><span class="stat-label">Expiry</span></div>
+        <div class="stat-tile"><span class="stat-value" id="stat-countdown">&mdash;</span><span class="stat-label">Time Left</span></div>
+      </div>
+
+      <div class="two-col">
+        <div class="tool-field-row">
+          <span class="tool-field-label">Header</span>
+          <pre class="tool-output" id="header-out"></pre>
+        </div>
+        <div class="tool-field-row">
+          <span class="tool-field-label">Payload</span>
+          <pre class="tool-output" id="payload-out"></pre>
+        </div>
+      </div>
+
+      <div class="tool-field-row">
+        <span class="tool-field-label">Registered Claims</span>
+        <ul class="match-list" id="claims-list"></ul>
+      </div>
+
+      <div class="tool-field-row">
+        <label class="tool-field-label" for="secret-input">Verify Signature &mdash; HMAC Shared Secret</label>
+        <input class="tool-text-input" id="secret-input" type="text" spellcheck="false" autocomplete="off" placeholder="your-256-bit-secret">
+      </div>
+      <div class="tool-controls">
+        <button class="tool-btn" id="verify-btn">Verify</button>
+        <span class="copy-toast" id="verify-toast"></span>
+      </div>
+      <p class="tool-output" id="verify-out">Signature not checked yet.</p>
+    </div>
+
+    <p class="tool-note">Decoding is not verification &mdash; anyone can read a JWT payload, so never trust its claims without checking the signature. Only the HMAC family (HS256 / HS384 / HS512) can be verified here, because RS/ES/PS algorithms need the issuer's public key rather than a shared secret.</p>
+
+    <div class="comm-window">
+      <div class="comm-portrait">
+        <svg width="36" height="36" viewBox="0 0 64 64">
+          <circle cx="32" cy="34" r="22" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="20" cy="16" r="8" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="44" cy="16" r="8" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="20" cy="16" r="3.5" fill="#050b10"/>
+          <circle cx="44" cy="16" r="3.5" fill="#050b10"/>
+          <ellipse cx="24" cy="32" rx="4.5" ry="5.5" fill="#050b10"/>
+          <ellipse cx="40" cy="32" rx="4.5" ry="5.5" fill="#050b10"/>
+          <circle cx="24" cy="30" r="1.4" fill="#39ff8f"/>
+          <circle cx="40" cy="30" r="1.4" fill="#39ff8f"/>
+          <path d="M22 42 Q32 48 42 42" stroke="#050b10" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="comm-body">
+        <div class="comm-label"><span class="dot"></span> Incoming Transmission &mdash; Slippy</div>
+        <p>"Tokens are secrets. Good thing this one never leaves your tab."</p>
+      </div>
+    </div>
+
+    <a href="https://projects.slippylabs.com/" class="hud-btn">&larr; Back to Archive</a>
+  </div>
+</main>
+
+<script>
+const SAMPLE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzbGlwcHlsYWJzIiwic3ViIjoicGlsb3QtNjQiLCJuYW1lIjoiU2xpcHB5IFRvYWQiLCJ0ZWFtIjoiRmFyIEZveCIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMDAwfQ.-TxJ7HjrbBDdd3lN2L6bRNFYdOdhrrOIuMe5NbG2UnA';
+const SAMPLE_SECRET = 'slippylabs-demo-secret';
+
+const CLAIM_INFO = {
+  iss: 'Issuer — who created and signed this token',
+  sub: 'Subject — who or what the token is about',
+  aud: 'Audience — who the token is intended for',
+  exp: 'Expiration Time — the token is rejected at or after this moment',
+  nbf: 'Not Before — the token is rejected before this moment',
+  iat: 'Issued At — when the token was created',
+  jti: 'JWT ID — unique identifier, used to prevent replay',
+};
+const TIME_CLAIMS = ['exp', 'nbf', 'iat'];
+
+const HMAC_HASH = { HS256: 'SHA-256', HS384: 'SHA-384', HS512: 'SHA-512' };
+
+const input = document.getElementById('jwt-input');
+const parseError = document.getElementById('parse-error');
+const resultPanel = document.getElementById('result-panel');
+const headerOut = document.getElementById('header-out');
+const payloadOut = document.getElementById('payload-out');
+const claimsList = document.getElementById('claims-list');
+const verifyOut = document.getElementById('verify-out');
+const statAlg = document.getElementById('stat-alg');
+const statTyp = document.getElementById('stat-typ');
+const statStatus = document.getElementById('stat-status');
+const statCountdown = document.getElementById('stat-countdown');
+
+let current = null;
+
+function b64urlToBytes(str) {
+  let s = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4 !== 0) s += '=';
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function b64urlToText(str) {
+  return new TextDecoder('utf-8', { fatal: true }).decode(b64urlToBytes(str));
+}
+
+function formatEpoch(seconds) {
+  const d = new Date(seconds * 1000);
+  if (isNaN(d.getTime())) return 'invalid date';
+  return d.toLocaleString() + ' (local)';
+}
+
+function relative(seconds) {
+  let delta = Math.round(seconds - Date.now() / 1000);
+  const future = delta >= 0;
+  delta = Math.abs(delta);
+  const units = [['d', 86400], ['h', 3600], ['m', 60], ['s', 1]];
+  const parts = [];
+  for (const [label, size] of units) {
+    if (delta >= size || (label === 's' && parts.length === 0)) {
+      parts.push(Math.floor(delta / size) + label);
+      delta %= size;
+    }
+    if (parts.length === 2) break;
+  }
+  return parts.join(' ') + (future ? ' from now' : ' ago');
+}
+
+function showError(msg) {
+  current = null;
+  parseError.textContent = msg;
+  parseError.classList.remove('hidden');
+  resultPanel.classList.add('hidden');
+}
+
+function addClaimRow(key, rawValue) {
+  const li = document.createElement('li');
+  const idx = document.createElement('span');
+  idx.className = 'match-index';
+  idx.textContent = key;
+  li.appendChild(idx);
+
+  const value = document.createElement('span');
+  if (TIME_CLAIMS.includes(key) && typeof rawValue === 'number') {
+    value.textContent = formatEpoch(rawValue) + ' — ' + relative(rawValue);
+  } else {
+    value.textContent = typeof rawValue === 'string' ? rawValue : JSON.stringify(rawValue);
+  }
+  li.appendChild(value);
+
+  const note = document.createElement('div');
+  note.className = 'tool-field-label';
+  note.style.marginTop = '4px';
+  note.textContent = CLAIM_INFO[key];
+  li.appendChild(note);
+  claimsList.appendChild(li);
+}
+
+function updateExpiryTiles() {
+  if (!current) return;
+  const exp = current.payload && current.payload.exp;
+  if (typeof exp !== 'number') {
+    statStatus.textContent = 'none';
+    statCountdown.textContent = '—';
+    statStatus.style.color = '';
+    return;
+  }
+  const expired = exp * 1000 <= Date.now();
+  statStatus.textContent = expired ? 'EXPIRED' : 'valid';
+  statStatus.style.color = expired ? 'var(--hud-red)' : 'var(--hud-green)';
+  statCountdown.textContent = relative(exp).replace(' from now', '').replace(' ago', ' overdue');
+}
+
+function decode() {
+  const raw = input.value.trim();
+  if (!raw) {
+    current = null;
+    parseError.classList.add('hidden');
+    resultPanel.classList.add('hidden');
+    return;
+  }
+
+  const parts = raw.split('.');
+  if (parts.length !== 3) {
+    showError('A JWT has exactly three dot-separated parts (header.payload.signature). Found ' + parts.length + '.');
+    return;
+  }
+  if (!/^[A-Za-z0-9_-]*$/.test(parts[0] + parts[1] + parts[2])) {
+    showError('Token contains characters that are not valid base64url.');
+    return;
+  }
+
+  let header, payload;
+  try {
+    header = JSON.parse(b64urlToText(parts[0]));
+  } catch (err) {
+    showError('Header is not valid base64url-encoded JSON: ' + err.message);
+    return;
+  }
+  try {
+    payload = JSON.parse(b64urlToText(parts[1]));
+  } catch (err) {
+    showError('Payload is not valid base64url-encoded JSON: ' + err.message);
+    return;
+  }
+
+  current = { parts: parts, header: header, payload: payload };
+  parseError.classList.add('hidden');
+  resultPanel.classList.remove('hidden');
+
+  headerOut.textContent = JSON.stringify(header, null, 2);
+  payloadOut.textContent = JSON.stringify(payload, null, 2);
+  statAlg.textContent = header.alg || '—';
+  statTyp.textContent = header.typ || '—';
+
+  claimsList.textContent = '';
+  let found = 0;
+  for (const key of Object.keys(CLAIM_INFO)) {
+    if (payload && Object.prototype.hasOwnProperty.call(payload, key)) {
+      addClaimRow(key, payload[key]);
+      found++;
+    }
+  }
+  if (found === 0) {
+    const li = document.createElement('li');
+    li.textContent = 'No registered claims present — every key in this payload is custom.';
+    claimsList.appendChild(li);
+  }
+
+  updateExpiryTiles();
+  verifyOut.textContent = 'Signature not checked yet.';
+  verifyOut.classList.remove('error-text');
+}
+
+async function verifySignature() {
+  if (!current) return;
+  const alg = current.header.alg;
+  if (!HMAC_HASH[alg]) {
+    verifyOut.textContent = 'Cannot verify "' + alg + '" here — only HS256, HS384 and HS512 use a shared secret. ' +
+      'RS/PS/ES tokens are signed with a private key and need the issuer\'s public key to check.';
+    verifyOut.classList.add('error-text');
+    return;
+  }
+  const secret = document.getElementById('secret-input').value;
+  if (!secret) {
+    verifyOut.textContent = 'Enter the shared secret to check the signature.';
+    verifyOut.classList.add('error-text');
+    return;
+  }
+
+  const enc = new TextEncoder();
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw', enc.encode(secret),
+      { name: 'HMAC', hash: { name: HMAC_HASH[alg] } },
+      false, ['verify']
+    );
+    const signingInput = enc.encode(current.parts[0] + '.' + current.parts[1]);
+    const ok = await crypto.subtle.verify('HMAC', key, b64urlToBytes(current.parts[2]), signingInput);
+    verifyOut.classList.toggle('error-text', !ok);
+    verifyOut.textContent = ok
+      ? 'Signature VALID — this token was signed with that secret using ' + alg + '.'
+      : 'Signature INVALID — the token was not signed with that secret (or it has been tampered with).';
+  } catch (err) {
+    verifyOut.classList.add('error-text');
+    verifyOut.textContent = 'Could not verify: ' + err.message;
+  }
+}
+
+input.addEventListener('input', decode);
+document.getElementById('verify-btn').addEventListener('click', verifySignature);
+document.getElementById('sample-btn').addEventListener('click', () => {
+  input.value = SAMPLE_TOKEN;
+  document.getElementById('secret-input').value = SAMPLE_SECRET;
+  decode();
+});
+document.getElementById('clear-btn').addEventListener('click', () => {
+  input.value = '';
+  document.getElementById('secret-input').value = '';
+  decode();
+});
+
+setInterval(updateExpiryTiles, 1000);
+
+// Arrive with the sample already decoded — an empty shell teaches nothing.
+input.value = SAMPLE_TOKEN;
+document.getElementById('secret-input').value = SAMPLE_SECRET;
+decode();
+</script>
+</body>
+</html>
